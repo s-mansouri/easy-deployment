@@ -1,0 +1,99 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "helm-deployment.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    name: {{ include "helm-deployment.name" . }}
+    instance: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ include "helm-deployment.name" . }}
+      instance: {{ .Release.Name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: {{ include "helm-deployment.name" . }}
+        instance: {{ .Release.Name }}
+    spec:
+      {{- if .Values.initImage.enabled }}
+      initContainers:
+      - name: init-{{ .Chart.Name }}
+        image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+        imagePullPolicy: {{ .Values.initImage.pullPolicy | quote }}
+        command: [ '/bin/sh', '-c' , {{ .Values.initImage.command | quote }} ]
+        {{- if .Values.initImage.volumeMounts.name }}
+        volumeMounts:
+        - name: {{ .Values.initImage.volumeMounts.name }}
+          mountPath: {{ .Values.initImage.volumeMounts.mountPath }}
+        {{- end}}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullSecrets:
+          - name: {{ include "helm-deployment.fullname" . }}-pull
+          restartPolicy: {{ .Values.restartPolicy }}
+          - env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helm-deployment.fullname" . }}
+                  key: mariadb-password
+            envFrom:
+            - configMapRef:
+                name: {{ include "helm-deployment.fullname" . }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          {{- if .Values.initImage.volumeMounts.name }}
+          volumeMounts:
+            - name: {{ .Values.initImage.volumeMounts.name }}
+              mountPath: {{ .Values.initImage.volumeMounts.mountPath }}
+          {{- end}}
+          livenessProbe:
+{{ toYaml .Values.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.readinessProbe | indent 12 }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        {{- if .Values.volume.configMap.name }}
+        - name: {{ .Values.volume.configMap.name }}
+          configMap:
+            name: {{ include "helm-deployment.fullname" . }}
+        {{- end }}
+        {{- if .Values.volume.existingClaim.name }}
+        - name: {{ .Values.volume.existingClaim.name }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.volume.existingClaim.claimName }}
+        {{- end }}
+        {{- if .Values.volume.persistentVolumeClaim.storageClass }}
+        - name: {{ .Values.volume.persistentVolumeClaim.name }}
+          persistentVolumeClaim:
+            claimName: {{ include "helm-deployment.fullname" . }}
+        {{- end }}
+
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

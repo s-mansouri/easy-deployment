@@ -1,0 +1,19 @@
+{{- if .Values.volume.persistentVolumeClaim.storageClass }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "helm-deployment.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+      name: {{ include "helm-deployment.name" . }}
+      instance: {{ .Release.Name }}
+      chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+      managed-by: {{ .Release.Service }}
+spec:
+  storageClassName: {{ .Values.volume.persistentVolumeClaim.storageClass | quote }}
+  accessModes:
+    - {{ .Values.volume.persistentVolumeClaim.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.volume.persistentVolumeClaim.size | quote }}
+{{- end }}
